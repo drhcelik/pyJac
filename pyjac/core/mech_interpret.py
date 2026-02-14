@@ -22,8 +22,14 @@ from . import chem_utilities as chem
 CANTERA_FLAG = False
 try:
     import cantera as ct
-    version = ct.__version__.split('.')
-    if int(version[0]) < 2 or int(version[1]) < 3:
+    version_match = re.match(r'^(\d+)\.(\d+)', ct.__version__)
+    if not version_match:
+        print('Unable to parse Cantera version: {}'.format(ct.__version__))
+        sys.exit(1)
+
+    version_major = int(version_match.group(1))
+    version_minor = int(version_match.group(2))
+    if version_major < 2 or (version_major == 2 and version_minor < 3):
         print('Parsing of Cantera mechanisms requires at least version 2.3.0 in order to access species thermo properties...')
         print('Detected version is only {}'.format(ct.__version__))
         sys.exit(1)
