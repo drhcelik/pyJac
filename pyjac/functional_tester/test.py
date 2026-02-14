@@ -1123,7 +1123,7 @@ def test(lang, home_dir, build_dir, mech_filename, therm_filename=None,
     # Interpret reaction mechanism file, depending on Cantera or
     # Chemkin format.
     ck_mech_filename = None
-    if not mech_filename.endswith(tuple(['.cti', '.xml'])):
+    if not mech_filename.endswith(tuple(['.cti', '.xml', '.yaml', '.yml'])):
         # Chemkin format; need to convert first.
         ck_mech_filename = mech_filename
         mech_filename = convert_mech(mech_filename, therm_filename)
