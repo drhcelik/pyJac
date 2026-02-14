@@ -62,9 +62,19 @@ def is_pdep(rxn):
     ``True`` if `rxn` is pressure dependent
 
     """
-    return (isinstance(rxn, ct.ThreeBodyReaction) or
-            isinstance(rxn, ct.FalloffReaction) or
-            isinstance(rxn, ct.ChemicallyActivatedReaction)
+        reaction_type = getattr(rxn, 'reaction_type', '').lower()
+
+        three_body = getattr(ct, 'ThreeBodyReaction', None)
+        falloff = getattr(ct, 'FalloffReaction', None)
+        chemically_activated = getattr(ct, 'ChemicallyActivatedReaction', None)
+
+        return ((three_body is not None and isinstance(rxn, three_body)) or
+            (falloff is not None and isinstance(rxn, falloff)) or
+            (chemically_activated is not None and
+             isinstance(rxn, chemically_activated)) or
+            ('three-body' in reaction_type) or
+            ('falloff' in reaction_type) or
+            ('chemically-activated' in reaction_type)
             )
 
 
@@ -378,8 +388,16 @@ def performance_tester(home, work_dir, use_old_opt):
                 num_threads = state['num_threads']
 
 
-            if any([isinstance(rxn, ct.PlogReaction) or
-                isinstance(rxn, ct.ChebyshevReaction) for rxn in gas.reactions()
+            if any([
+                ('pressure-dependent-arrhenius' in
+                 getattr(rxn, 'reaction_type', '').lower()) or
+                ('plog' in getattr(rxn, 'reaction_type', '').lower()) or
+                ('chebyshev' in getattr(rxn, 'reaction_type', '').lower()) or
+                (getattr(ct, 'PlogReaction', None) is not None and
+                 isinstance(rxn, ct.PlogReaction)) or
+                (getattr(ct, 'ChebyshevReaction', None) is not None and
+                 isinstance(rxn, ct.ChebyshevReaction))
+                for rxn in gas.reactions()
                 ]) and lang == 'tchem':
                 print('TChem performance evaluation disabled; '
                       'not compatible with Plog or Chebyshev reactions.'
