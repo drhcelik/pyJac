@@ -244,10 +244,11 @@ def performance_tester(home, work_dir, use_old_opt):
             files = [f for f in os.listdir(os.path.join(work_dir, name)) if
                         os.path.isfile(os.path.join(work_dir, name, f))]
             for f in files:
-                if f.endswith('.cti'):
+                if f.endswith(tuple(['.cti', '.xml', '.yaml', '.yml'])):
                     mechanism_list[name] = {}
                     mechanism_list[name]['mech'] = f
-                    mechanism_list[name]['chemkin'] = f.replace('.cti', '.dat')
+                    if f.endswith('.cti'):
+                        mechanism_list[name]['chemkin'] = f.replace('.cti', '.dat')
                     gas = ct.Solution(os.path.join(work_dir, name, f))
                     mechanism_list[name]['ns'] = gas.n_species
 
@@ -383,6 +384,11 @@ def performance_tester(home, work_dir, use_old_opt):
                 print('TChem performance evaluation disabled; '
                       'not compatible with Plog or Chebyshev reactions.'
                       )
+                continue
+            if lang == 'tchem' and 'chemkin' not in mech_info:
+                print('TChem performance evaluation disabled; '
+                    'requires Chemkin mechanism file.'
+                    )
                 continue
 
             data_output = ('{}_{}_{}_{}_{}'.format(lang, 'co' if opt else 'nco',
