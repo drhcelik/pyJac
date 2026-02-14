@@ -948,7 +948,9 @@ def read_mech_ct(filename=None, gas=None):
         spec.Trange = [species.thermo.min_temp, coeffs[0],
                        species.thermo.max_temp
                        ]
-        if isinstance(species.thermo, ct.NasaPoly2):
+        nasa_poly_2 = getattr(ct, 'NasaPoly2', None)
+        if ((nasa_poly_2 is not None and isinstance(species.thermo, nasa_poly_2))
+                or len(coeffs) >= 15):
             spec.hi = coeffs[1:8]
             spec.lo = coeffs[8:15]
         else:
@@ -980,23 +982,69 @@ def read_mech_ct(filename=None, gas=None):
             The updated pyjac reaction with appropriate third body efficiencies
         """
 
+        efficiencies = {}
+        default_efficiency = 1.0
+
+        if hasattr(ct_rxn, 'efficiencies'):
+            efficiencies = dict(ct_rxn.efficiencies)
+            default_efficiency = getattr(ct_rxn, 'default_efficiency', 1.0)
+        elif hasattr(ct_rxn, 'third_body') and ct_rxn.third_body is not None:
+            efficiencies = dict(getattr(ct_rxn.third_body, 'efficiencies', {}))
+            default_efficiency = getattr(ct_rxn.third_body,
+                                         'default_efficiency', 1.0)
+
         # See if single species acts as third body
-        if rxn.default_efficiency == 0.0 \
-                and len(ct_rxn.efficiencies.keys()) == 1\
-                and list(ct_rxn.efficiencies.values())[0] == 1\
+        if default_efficiency == 0.0 \
+                and len(efficiencies) == 1 \
+                and list(efficiencies.values())[0] == 1 \
                 and reac.pdep:
-            reac.pdep_sp = list(rxn.efficiencies.keys())[0]
+            reac.pdep_sp = list(efficiencies.keys())[0]
         else:
             for sp in gas.species_names:
-                if sp in ct_rxn.efficiencies:
-                    reac.thd_body_eff.append([sp, ct_rxn.efficiencies[sp]])
-                elif ct_rxn.default_efficiency != 1.0:
-                    reac.thd_body_eff.append([sp, ct_rxn.default_efficiency])
+                if sp in efficiencies:
+                    reac.thd_body_eff.append([sp, efficiencies[sp]])
+                elif default_efficiency != 1.0:
+                    reac.thd_body_eff.append([sp, default_efficiency])
         return reac
+
+    def get_reaction_type(rxn):
+        return getattr(rxn, 'reaction_type', '').lower()
+
+    def has_rxn_class(name):
+        return getattr(ct, name, None)
+
+    def is_rxn_class(rxn, class_name):
+        class_obj = has_rxn_class(class_name)
+        return class_obj is not None and isinstance(rxn, class_obj)
+
+    def is_three_body(rxn):
+        return is_rxn_class(rxn, 'ThreeBodyReaction') or \
+            'three-body' in get_reaction_type(rxn)
+
+    def is_chemically_activated(rxn):
+        return is_rxn_class(rxn, 'ChemicallyActivatedReaction') or \
+            'chemically-activated' in get_reaction_type(rxn)
+
+    def is_falloff(rxn):
+        return is_rxn_class(rxn, 'FalloffReaction') or \
+            'falloff' in get_reaction_type(rxn)
+
+    def is_plog(rxn):
+        rtype = get_reaction_type(rxn)
+        return is_rxn_class(rxn, 'PlogReaction') or \
+            'pressure-dependent-arrhenius' in rtype or 'plog' in rtype
+
+    def is_chebyshev(rxn):
+        return is_rxn_class(rxn, 'ChebyshevReaction') or \
+            'chebyshev' in get_reaction_type(rxn)
+
+    def is_elementary(rxn):
+        return is_rxn_class(rxn, 'ElementaryReaction') or \
+            'elementary' in get_reaction_type(rxn) or hasattr(rxn, 'rate')
 
     for rxn in gas.reactions():
 
-        if isinstance(rxn, ct.ThreeBodyReaction):
+        if is_three_body(rxn):
             # Instantiate internal reaction based on Cantera Reaction data.
             reac = chem.ReacInfo(rxn.reversible,
                                  list(rxn.reactants.keys()),
@@ -1010,8 +1058,7 @@ def read_mech_ct(filename=None, gas=None):
             reac.thd_body = True
             reac = handle_effiencies(reac, rxn)
 
-        elif isinstance(rxn, ct.FalloffReaction) and \
-             not isinstance(rxn, ct.ChemicallyActivatedReaction):
+        elif is_falloff(rxn) and not is_chemically_activated(rxn):
             reac = chem.ReacInfo(rxn.reversible,
                                  list(rxn.reactants.keys()),
                                  list(rxn.reactants.values()),
@@ -1046,7 +1093,7 @@ def read_mech_ct(filename=None, gas=None):
                 reac.sri = True
                 reac.sri_par = rxn.falloff.parameters.tolist()
 
-        elif isinstance(rxn, ct.ChemicallyActivatedReaction):
+        elif is_chemically_activated(rxn):
             reac = chem.ReacInfo(rxn.reversible,
                                  list(rxn.reactants.keys()),
                                  list(rxn.reactants.values()),
@@ -1081,7 +1128,7 @@ def read_mech_ct(filename=None, gas=None):
                 reac.sri = True
                 reac.sri_par = rxn.falloff.parameters.tolist()
 
-        elif isinstance(rxn, ct.PlogReaction):
+        elif is_plog(rxn):
             reac = chem.ReacInfo(rxn.reversible,
                                  list(rxn.reactants.keys()),
                                  list(rxn.reactants.values()),
@@ -1098,7 +1145,7 @@ def read_mech_ct(filename=None, gas=None):
                         ]
                 reac.plog_par.append(pars)
 
-        elif isinstance(rxn, ct.ChebyshevReaction):
+        elif is_chebyshev(rxn):
             reac = chem.ReacInfo(rxn.reversible,
                                  list(rxn.reactants.keys()),
                                  list(rxn.reactants.values()),
@@ -1113,7 +1160,7 @@ def read_mech_ct(filename=None, gas=None):
             reac.cheb_tlim = [rxn.Tmin, rxn.Tmax]
             reac.cheb_par = rxn.coeffs
 
-        elif isinstance(rxn, ct.ElementaryReaction):
+        elif is_elementary(rxn):
             # Instantiate internal reaction based on Cantera Reaction data.
 
             # Ensure no reactions with zero pre-exponential factor allowed
